@@ -668,6 +668,98 @@ pub enum TabLeader {
     MiddleDot,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ArtStyle {
+    #[serde(rename = "wdArtFlowersBlockPrint")]
+    WdArtFlowersBlockPrint,
+    #[serde(rename = "wdArtFlowersDaisies")]
+    WdArtFlowersDaisies,
+    #[serde(rename = "wdArtFlowersModern1")]
+    WdArtFlowersModern1,
+    #[serde(rename = "wdArtFlowersModern2")]
+    WdArtFlowersModern2,
+    #[serde(rename = "wdArtFlowersPansy")]
+    WdArtFlowersPansy,
+    #[serde(rename = "wdArtFlowersRedRose")]
+    WdArtFlowersRedRose,
+    #[serde(rename = "wdArtFlowersRoses")]
+    WdArtFlowersRoses,
+    #[serde(rename = "wdArtFlowersTeacup")]
+    WdArtFlowersTeacup,
+    #[serde(rename = "wdArtFlowersTiny")]
+    WdArtFlowersTiny,
+}
+
+impl ArtStyle {
+    pub const ALL: [ArtStyle; 9] = [
+        ArtStyle::WdArtFlowersBlockPrint,
+        ArtStyle::WdArtFlowersDaisies,
+        ArtStyle::WdArtFlowersModern1,
+        ArtStyle::WdArtFlowersModern2,
+        ArtStyle::WdArtFlowersPansy,
+        ArtStyle::WdArtFlowersRedRose,
+        ArtStyle::WdArtFlowersRoses,
+        ArtStyle::WdArtFlowersTeacup,
+        ArtStyle::WdArtFlowersTiny,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ArtStyle::WdArtFlowersBlockPrint => "wdArtFlowersBlockPrint",
+            ArtStyle::WdArtFlowersDaisies => "wdArtFlowersDaisies",
+            ArtStyle::WdArtFlowersModern1 => "wdArtFlowersModern1",
+            ArtStyle::WdArtFlowersModern2 => "wdArtFlowersModern2",
+            ArtStyle::WdArtFlowersPansy => "wdArtFlowersPansy",
+            ArtStyle::WdArtFlowersRedRose => "wdArtFlowersRedRose",
+            ArtStyle::WdArtFlowersRoses => "wdArtFlowersRoses",
+            ArtStyle::WdArtFlowersTeacup => "wdArtFlowersTeacup",
+            ArtStyle::WdArtFlowersTiny => "wdArtFlowersTiny",
+        }
+    }
+
+    pub fn value(self) -> u32 {
+        match self {
+            ArtStyle::WdArtFlowersBlockPrint => 49,
+            ArtStyle::WdArtFlowersDaisies => 48,
+            ArtStyle::WdArtFlowersModern1 => 45,
+            ArtStyle::WdArtFlowersModern2 => 44,
+            ArtStyle::WdArtFlowersPansy => 43,
+            ArtStyle::WdArtFlowersRedRose => 39,
+            ArtStyle::WdArtFlowersRoses => 38,
+            ArtStyle::WdArtFlowersTeacup => 103,
+            ArtStyle::WdArtFlowersTiny => 42,
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            ArtStyle::WdArtFlowersBlockPrint => "A block flowers print border.",
+            ArtStyle::WdArtFlowersDaisies => "A daisies border.",
+            ArtStyle::WdArtFlowersModern1 => "A modern flowers number 1 border.",
+            ArtStyle::WdArtFlowersModern2 => "A modern flowers number 2 border.",
+            ArtStyle::WdArtFlowersPansy => "A pansy border.",
+            ArtStyle::WdArtFlowersRedRose => "A red rose border.",
+            ArtStyle::WdArtFlowersRoses => "A rose border.",
+            ArtStyle::WdArtFlowersTeacup => "A teacup border.",
+            ArtStyle::WdArtFlowersTiny => "A tiny flower border.",
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<ArtStyle> {
+        let s = s.trim();
+        if let Ok(val) = s.parse::<u32>() {
+            if let Some(a) = Self::from_value(val) {
+                return Some(a);
+            }
+        }
+        ArtStyle::ALL.iter().copied().find(|a| a.name().eq_ignore_ascii_case(s))
+    }
+
+    pub fn from_value(v: u32) -> Option<ArtStyle> {
+        ArtStyle::ALL.iter().copied().find(|a| a.value() == v)
+    }
+}
+
 impl TabLeader {
     pub fn char(self) -> Option<char> {
         match self {
@@ -771,17 +863,20 @@ pub struct Borders {
     pub between: Option<Border>,
     /// Inside vertical (tables).
     pub inside_v: Option<Border>,
+    /// Decorative art border for page borders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub art: Option<ArtStyle>,
 }
 
 impl Borders {
     pub fn all(b: Border) -> Borders {
-        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: Some(b), inside_v: Some(b) }
+        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: Some(b), inside_v: Some(b), art: None }
     }
     pub fn box_(b: Border) -> Borders {
-        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: None, inside_v: None }
+        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: None, inside_v: None, art: None }
     }
     pub fn any_visible(&self) -> bool {
-        [self.top, self.left, self.bottom, self.right, self.between, self.inside_v].iter().flatten().any(Border::is_visible)
+        self.art.is_some() || [self.top, self.left, self.bottom, self.right, self.between, self.inside_v].iter().flatten().any(Border::is_visible)
     }
     /// Apply every `Some` side of `patch` on top of `self`.
     pub fn overlay(&mut self, patch: &Borders) {
@@ -802,6 +897,9 @@ impl Borders {
         }
         if patch.inside_v.is_some() {
             self.inside_v = patch.inside_v;
+        }
+        if patch.art.is_some() {
+            self.art = patch.art;
         }
     }
 }

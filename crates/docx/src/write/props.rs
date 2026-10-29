@@ -210,7 +210,13 @@ fn border_el(w: &mut W, name: &str, b: &Border) {
 /// Borders element. `inner` names the between/insideH element (`w:between` for paragraphs,
 /// `w:insideH` for tables/cells; `None` for page borders).
 pub fn borders(w: &mut W, tag: &str, b: &Borders, inner: Option<&str>, extra: &[(&str, &str)]) {
-    w.open(tag, extra);
+    let mut extra_vec = extra.to_vec();
+    let art_val;
+    if let Some(art) = b.art {
+        art_val = art.name();
+        extra_vec.push(("w:val", art_val));
+    }
+    w.open(tag, &extra_vec);
     if let Some(x) = &b.top {
         border_el(w, "w:top", x);
     }

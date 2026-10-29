@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use wordcraft_doc::para::cap_alt;
 use wordcraft_doc::props::{
-    Align, Border, BorderStyle, Borders, CellProps, CharProps, CombineBrackets, EastAsianLayout, HeightRule, Highlight, LineSpacing, NumRef,
+    Align, ArtStyle, Border, BorderStyle, Borders, CellProps, CharProps, CombineBrackets, EastAsianLayout, HeightRule, Highlight, LineSpacing, NumRef,
     ParaProps, Rgb, RowProps, TabAlign, TabLeader, TabStop, TableFloat, TableLook, TableProps, TextColor, TextDirection, Underline, VAlign, VMerge,
     VertAlign,
 };
@@ -417,8 +417,19 @@ pub fn border(e: &El) -> Border {
 /// `w:pBdr`, `w:tblBorders`, `w:tcBorders`, `w:pgBorders`.
 pub fn borders(e: &El) -> Borders {
     let mut b = Borders::default();
+    if let Some(val) = e.attr("w:val") {
+        if let Some(art) = ArtStyle::from_name(val) {
+            b.art = Some(art);
+        }
+    }
     for k in e.els() {
-        match k.local() {
+        let local = k.local();
+        if let Some(val) = k.attr("w:val") {
+            if let Some(art) = ArtStyle::from_name(val) {
+                b.art = Some(art);
+            }
+        }
+        match local {
             "top" => b.top = Some(border(k)),
             "left" | "start" => b.left = Some(border(k)),
             "bottom" => b.bottom = Some(border(k)),

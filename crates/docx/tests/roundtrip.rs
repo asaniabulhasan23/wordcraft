@@ -170,7 +170,7 @@ fn every_para_prop_round_trips() {
             TabStop { pos: 250.0, align: TabAlign::Bar, leader: TabLeader::MiddleDot },
         ]),
         shading: Some(Rgb(0xDD, 0xEE, 0xFF)),
-        borders: Some(Borders { top: Some(b), left: Some(Border::single(0.5)), bottom: Some(b), right: None, between: Some(b), inside_v: None }),
+        borders: Some(Borders { top: Some(b), left: Some(Border::single(0.5)), bottom: Some(b), right: None, between: Some(b), inside_v: None, art: Some(wordcraft_doc::props::ArtStyle::WdArtFlowersDaisies) }),
         suppress_hyphens: Some(true),
         suppress_line_numbers: Some(true),
         bidi: Some(false),

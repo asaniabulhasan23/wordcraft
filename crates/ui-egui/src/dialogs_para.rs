@@ -5,7 +5,7 @@
 use egui::{Rect, Sense, Stroke, Ui, pos2, vec2};
 use serde::Serialize;
 use serde_json::{Value, json};
-use wordcraft_doc::props::{Border, BorderStyle, Borders, Rgb, TabAlign, TabLeader, TabStop};
+use wordcraft_doc::props::{ArtStyle, Border, BorderStyle, Borders, Rgb, TabAlign, TabLeader, TabStop};
 
 use crate::WordApp;
 use crate::dialogs::{buttons, color_menu};
@@ -360,6 +360,7 @@ pub struct LineForm {
     pub width: f32,
     /// Top, bottom, left, right, between.
     pub sides: [bool; 5],
+    pub art: Option<ArtStyle>,
 }
 
 const TOP: usize = 0;
@@ -412,6 +413,7 @@ impl LineForm {
             color: first.and_then(|f| f.color).map(Rgb::hex).unwrap_or_default(),
             width: if width > 0.0 { width } else { 0.5 },
             sides: on,
+            art: b.and_then(|b| b.art),
         }
     }
 
@@ -520,7 +522,13 @@ impl BordersForm {
         }
         if self.page != b.page || self.whole_doc != b.whole_doc {
             let apply = if self.whole_doc { "document" } else { "section" };
-            out.push(("design.pageBorders", json!({"sides": self.page.sides_param(), "applyTo": apply})));
+                let mut params = json!({"sides": self.page.sides_param(), "applyTo": apply});
+                if let Some(art) = self.page.art {
+                    params["art"] = json!(art.name());
+                } else {
+                    params["art"] = Value::Null;
+                }
+                out.push(("design.pageBorders", params));
         }
         if self.fill != b.fill || self.fill_to_text != b.fill_to_text {
             let color = Rgb::parse(&self.fill).map(|c| json!(c.hex())).unwrap_or(Value::Null);
@@ -638,6 +646,33 @@ fn lines(ui: &mut Ui, id: &str, l: &mut LineForm, theme: &[Rgb], fill: Option<Rg
                         ui.selectable_value(&mut l.width, w, crate::i18n::fmt(tl!("{n} pt"), &[("n", &w.to_string())]));
                     }
                 });
+            if target == Target::Page {
+                ui.add_space(4.0);
+                ui.label(tl!("Art:"));
+                let current_art = l.art.map_or(tl!("(none)").to_string(), |a| a.name().to_string());
+                egui::ComboBox::from_id_salt((id, "art"))
+                    .selected_text(current_art)
+                    .width(140.0)
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(l.art.is_none(), tl!("(none)")).clicked() {
+                            l.art = None;
+                        }
+                        ui.separator();
+                        for art in ArtStyle::ALL {
+                            let selected = l.art == Some(art);
+                            ui.horizontal(|ui| {
+                                draw_art_thumbnail(ui, art, l.color.as_str());
+                                if ui.selectable_label(selected, art.name()).clicked() {
+                                    l.art = Some(art);
+                                    if !l.sides.iter().any(|&x| x) {
+                                        l.sides = [true, true, true, true, false];
+                                        l.setting = Setting::Box;
+                                    }
+                                }
+                            });
+                        }
+                    });
+            }
         });
         ui.add_space(8.0);
         ui.vertical(|ui| {
@@ -698,9 +733,16 @@ fn preview(ui: &mut Ui, l: &LineForm, fill: Option<Rgb>, target: Target) -> Opti
         (RIGHT, [area.right_top(), area.right_bottom()]),
         (BETWEEN, [pos2(area.min.x, area.center().y), pos2(area.max.x, area.center().y)]),
     ];
-    for (side, seg) in edges {
-        if l.sides.get(side).copied().unwrap_or(false) && (side != BETWEEN || between) {
-            draw_line(&p, seg, l.style, l.side_width(side), color);
+    if target == Target::Page && l.art.is_some() {
+        if let Some(art) = l.art {
+            let art_color = Rgb::parse(&l.color).unwrap_or(Rgb(0x40, 0x70, 0xA0));
+            draw_art_preview_border(&p, area, l, art, art_color);
+        }
+    } else {
+        for (side, seg) in edges {
+            if l.sides.get(side).copied().unwrap_or(false) && (side != BETWEEN || between) {
+                draw_line(&p, seg, l.style, l.side_width(side), color);
+            }
         }
     }
     if !resp.clicked() {
@@ -713,6 +755,153 @@ fn preview(ui: &mut Ui, l: &LineForm, fill: Option<Rgb>, target: Target) -> Opti
         sides.push(BETWEEN);
     }
     sides.into_iter().map(|s| (s, d(s))).filter(|(_, dist)| *dist < 14.0).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(s, _)| s)
+}
+
+/// Draws a distinct thumbnail for each Art border style in the dropdown menu.
+fn draw_art_thumbnail(ui: &mut Ui, art: ArtStyle, color_str: &str) {
+    let (rect, _) = ui.allocate_exact_size(vec2(24.0, 16.0), Sense::hover());
+    let painter = ui.painter_at(rect);
+    let color = Rgb::parse(color_str).map(crate::theme::c32).unwrap_or(egui::Color32::from_rgb(0x40, 0x70, 0xA0));
+    painter.rect_filled(rect, 1.0, egui::Color32::from_rgb(0xF5, 0xF5, 0xF5));
+
+    let cx = rect.center().x;
+    let cy = rect.center().y;
+
+    match art {
+        ArtStyle::WdArtFlowersBlockPrint => {
+            painter.circle_filled(pos2(cx - 4.0, cy), 3.0, color);
+            painter.circle_filled(pos2(cx + 4.0, cy), 3.0, color);
+            painter.rect_filled(Rect::from_center_size(pos2(cx, cy), vec2(3.0, 3.0)), 0.0, egui::Color32::from_rgb(0xE0, 0xA0, 0x20));
+        }
+        ArtStyle::WdArtFlowersDaisies => {
+            for dx in [-6.0, 0.0, 6.0] {
+                painter.circle_filled(pos2(cx + dx, cy), 3.5, egui::Color32::WHITE);
+                painter.circle_filled(pos2(cx + dx, cy), 1.5, egui::Color32::from_rgb(0xFF, 0xC0, 0x00));
+            }
+        }
+        ArtStyle::WdArtFlowersModern1 => {
+            painter.line_segment([pos2(rect.min.x + 2.0, cy), pos2(rect.max.x - 2.0, cy)], Stroke::new(1.0, egui::Color32::from_rgb(0x30, 0x60, 0x50)));
+            painter.circle_filled(pos2(cx, cy - 2.0), 4.0, color);
+        }
+        ArtStyle::WdArtFlowersModern2 => {
+            painter.rect_filled(Rect::from_center_size(pos2(cx, cy), vec2(8.0, 8.0)), 1.0, color);
+            painter.circle_filled(pos2(cx, cy), 2.5, egui::Color32::from_rgb(0x70, 0xC0, 0xE0));
+        }
+        ArtStyle::WdArtFlowersPansy => {
+            painter.circle_filled(pos2(cx - 3.0, cy - 2.0), 3.0, egui::Color32::from_rgb(0x70, 0x30, 0xA0));
+            painter.circle_filled(pos2(cx + 3.0, cy - 2.0), 3.0, egui::Color32::from_rgb(0x70, 0x30, 0xA0));
+            painter.circle_filled(pos2(cx, cy + 2.0), 3.5, egui::Color32::from_rgb(0xFF, 0xC0, 0x00));
+            painter.circle_filled(pos2(cx, cy), 1.5, egui::Color32::from_rgb(0x30, 0x00, 0x40));
+        }
+        ArtStyle::WdArtFlowersRedRose => {
+            painter.circle_filled(pos2(cx, cy), 5.0, color);
+            painter.circle_filled(pos2(cx - 1.0, cy - 1.0), 3.0, egui::Color32::from_rgb(0x80, 0x00, 0x10));
+            painter.circle_filled(pos2(cx, cy), 1.5, color);
+        }
+        ArtStyle::WdArtFlowersRoses => {
+            painter.line_segment([pos2(rect.min.x + 2.0, cy), pos2(rect.max.x - 2.0, cy)], Stroke::new(1.0, egui::Color32::from_rgb(0x40, 0x80, 0x30)));
+            painter.circle_filled(pos2(cx - 4.0, cy), 3.0, color);
+            painter.circle_filled(pos2(cx + 4.0, cy), 3.0, color);
+        }
+        ArtStyle::WdArtFlowersTeacup => {
+            let cup_rect = Rect::from_center_size(pos2(cx, cy + 1.0), vec2(10.0, 7.0));
+            painter.rect_filled(cup_rect, 1.0, color);
+            painter.circle_filled(pos2(cx, cy + 1.0), 1.5, egui::Color32::from_rgb(0xE0, 0x60, 0x80));
+        }
+        ArtStyle::WdArtFlowersTiny => {
+            painter.line_segment([pos2(rect.min.x, cy), pos2(rect.max.x, cy)], Stroke::new(1.0, egui::Color32::from_rgb(0x60, 0xA0, 0x50)));
+            for dx in [-6.0, 0.0, 6.0] {
+                painter.circle_filled(pos2(cx + dx, cy), 2.0, color);
+                painter.circle_filled(pos2(cx + dx, cy), 0.8, egui::Color32::from_rgb(0xFF, 0xE0, 0x60));
+            }
+        }
+    }
+}
+
+/// Renders the Art border in the dialog's live preview box.
+fn draw_art_preview_border(p: &egui::Painter, area: Rect, l: &LineForm, art: ArtStyle, color: Rgb) {
+    let stroke_color = crate::theme::c32(color);
+    let top_on = l.sides.get(TOP).copied().unwrap_or(false);
+    let bottom_on = l.sides.get(BOTTOM).copied().unwrap_or(false);
+    let left_on = l.sides.get(LEFT).copied().unwrap_or(false);
+    let right_on = l.sides.get(RIGHT).copied().unwrap_or(false);
+
+    let (x0, y0) = (area.min.x, area.min.y);
+    let (x1, y1) = (area.max.x, area.max.y);
+
+    let step = 8.0;
+
+    if top_on {
+        let mut x = x0;
+        while x <= x1 {
+            draw_art_preview_tile(p, pos2(x, y0), art, stroke_color);
+            x += step;
+        }
+    }
+
+    if bottom_on {
+        let mut x = x0;
+        while x <= x1 {
+            draw_art_preview_tile(p, pos2(x, y1), art, stroke_color);
+            x += step;
+        }
+    }
+
+    if left_on {
+        let mut y = y0;
+        while y <= y1 {
+            draw_art_preview_tile(p, pos2(x0, y), art, stroke_color);
+            y += step;
+        }
+    }
+
+    if right_on {
+        let mut y = y0;
+        while y <= y1 {
+            draw_art_preview_tile(p, pos2(x1, y), art, stroke_color);
+            y += step;
+        }
+    }
+}
+
+fn draw_art_preview_tile(p: &egui::Painter, pos: egui::Pos2, art: ArtStyle, color: egui::Color32) {
+    match art {
+        ArtStyle::WdArtFlowersBlockPrint => {
+            p.circle_filled(pos, 2.5, color);
+            p.rect_filled(Rect::from_center_size(pos, vec2(1.5, 1.5)), 0.0, egui::Color32::from_rgb(0xF0, 0xC0, 0x40));
+        }
+        ArtStyle::WdArtFlowersDaisies => {
+            p.circle_filled(pos, 3.0, egui::Color32::WHITE);
+            p.circle_filled(pos, 1.2, egui::Color32::from_rgb(0xFF, 0xC0, 0x00));
+        }
+        ArtStyle::WdArtFlowersModern1 => {
+            p.circle_filled(pos, 2.5, color);
+        }
+        ArtStyle::WdArtFlowersModern2 => {
+            p.rect_filled(Rect::from_center_size(pos, vec2(4.0, 4.0)), 0.5, color);
+            p.circle_filled(pos, 1.5, egui::Color32::from_rgb(0x70, 0xC0, 0xE0));
+        }
+        ArtStyle::WdArtFlowersPansy => {
+            p.circle_filled(pos2(pos.x - 1.0, pos.y - 1.0), 2.0, egui::Color32::from_rgb(0x70, 0x30, 0xA0));
+            p.circle_filled(pos2(pos.x + 1.0, pos.y - 1.0), 2.0, egui::Color32::from_rgb(0x70, 0x30, 0xA0));
+            p.circle_filled(pos2(pos.x, pos.y + 1.0), 2.2, egui::Color32::from_rgb(0xFF, 0xC0, 0x00));
+        }
+        ArtStyle::WdArtFlowersRedRose => {
+            p.circle_filled(pos, 3.0, color);
+            p.circle_filled(pos, 1.5, egui::Color32::from_rgb(0x80, 0x00, 0x10));
+        }
+        ArtStyle::WdArtFlowersRoses => {
+            p.circle_filled(pos, 2.5, color);
+        }
+        ArtStyle::WdArtFlowersTeacup => {
+            p.rect_filled(Rect::from_center_size(pos, vec2(5.0, 3.5)), 0.5, color);
+            p.circle_filled(pos, 1.0, egui::Color32::from_rgb(0xE0, 0x60, 0x80));
+        }
+        ArtStyle::WdArtFlowersTiny => {
+            p.circle_filled(pos, 1.8, color);
+            p.circle_filled(pos, 0.8, egui::Color32::from_rgb(0xFF, 0xE0, 0x60));
+        }
+    }
 }
 
 fn dist_to_segment(p: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {

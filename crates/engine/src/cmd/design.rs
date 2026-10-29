@@ -1,7 +1,7 @@
 //! Design tab: themes, style sets, colours, fonts, paragraph spacing, watermark, page colour, borders.
 
 use serde_json::{Value, json};
-use wordcraft_doc::props::{Border, BorderStyle, Borders, LineSpacing, Rgb, TextColor};
+use wordcraft_doc::props::{ArtStyle, Border, BorderStyle, Borders, LineSpacing, Rgb, TextColor};
 use wordcraft_doc::{Watermark, styles};
 
 use super::sel_result;
@@ -76,7 +76,7 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .params(r#"{"color": "RRGGBB" | null}"#),
         CommandSpec::new("design.pageBorders", "Page Borders", "Design › Page Background", page_borders).params(
-            r#"{"kind"?: "box|none", "width"?: pt, "color"?: "RRGGBB", "style"?: "single|double|dotted|dashed|thick|triple|dotDash|wave", "sides"?: {"top"|"left"|"bottom"|"right": {"style"?, "width"?: pt, "color"?: "RRGGBB"} | null} (exactly these sides, instead of `kind`), "applyTo"?: "section|document"}"#,
+            r#"{"kind"?: "box|none", "art"?: string | number, "width"?: pt, "color"?: "RRGGBB", "style"?: "single|double|dotted|dashed|thick|triple|dotDash|wave", "sides"?: {"top"|"left"|"bottom"|"right": {"style"?, "width"?: pt, "color"?: "RRGGBB"} | null} (exactly these sides, instead of `kind`), "applyTo"?: "section|document"}"#,
         ),
         CommandSpec::new("design.setDefault", "Set as Default", "Design › Document Formatting", |s, _| {
             s.status = "These settings will be used for new documents.".into();
@@ -217,16 +217,32 @@ fn watermark(s: &mut Session, v: &Value) -> CmdResult {
 
 /// Page borders of the caret's section (or every section with `applyTo: "document"`).
 fn page_borders(s: &mut Session, v: &Value) -> CmdResult {
-    let borders = match v.get("sides") {
+    let art = v.get("art").and_then(|a| {
+        if let Some(s) = a.as_str() {
+            ArtStyle::from_name(s)
+        } else if let Some(n) = a.as_u64() {
+            ArtStyle::from_value(n as u32)
+        } else {
+            None
+        }
+    });
+    let mut borders = match v.get("sides") {
         Some(sides) => Some(super::para::border_sides(sides, 24.0, 24.0)?).filter(Borders::any_visible),
         None => {
             let kind = p::str(v, "kind").unwrap_or("box");
             let width = p::f32(v, "width").unwrap_or(1.0).clamp(0.25, 6.0);
             let color = p::str(v, "color").and_then(Rgb::parse);
             let style = p::str(v, "style").map(BorderStyle::from_ooxml).unwrap_or(BorderStyle::Single);
-            (kind != "none").then(|| Borders::box_(Border { style, width, color, space: 24.0 }))
+            if art.is_some() || kind != "none" {
+                Some(Borders::box_(Border { style, width, color, space: 24.0 }))
+            } else {
+                None
+            }
         }
     };
+    if let Some(b) = borders.as_mut() {
+        b.art = art;
+    }
     let blocks: Vec<usize> = match p::str(v, "applyTo") {
         Some("document") => s.doc.sections().iter().map(|(end, _)| *end).collect(),
         Some("section") | None => vec![s.sel.focus.path.0.first().copied().unwrap_or(0) as usize],

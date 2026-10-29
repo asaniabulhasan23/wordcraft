@@ -21,6 +21,7 @@ pub mod styleref;
 mod table;
 mod textbox;
 mod vertical;
+pub mod art_borders;
 pub mod wordart;
 
 use std::collections::{HashMap, HashSet};
@@ -1838,6 +1839,9 @@ impl NoteBox {
 fn page_border_rules(s: &SectionProps) -> Vec<Placed> {
     let mut v = Vec::new();
     if let Some(b) = &s.page_borders {
+        if let Some(art) = b.art {
+            return art_borders::art_border_rules(s, b, art);
+        }
         let sp = |e: &Option<Border>| e.map(|x| x.space).unwrap_or(24.0);
         let (x0, x1, y0, y1) = (sp(&b.left), s.page_w - sp(&b.right), sp(&b.top), s.page_h - sp(&b.bottom));
         for (e, a, bb) in [(b.top, (x0, y0), (x1, y0)), (b.bottom, (x0, y1), (x1, y1)), (b.left, (x0, y0), (x0, y1)), (b.right, (x1, y0), (x1, y1))] {
