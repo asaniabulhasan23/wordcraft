@@ -3759,7 +3759,7 @@ fn at_least_rows_add_cell_margins_and_border_bands() {
     let mut d = Document::from_text("");
     let line = Some(Border { style: BorderStyle::Single, width: 0.5, color: None, space: 0.0 });
     let mut t = Table::new(2, 1, 200.0);
-    t.props.borders = Some(Borders { top: line, left: line, bottom: line, right: line, between: line, inside_v: line });
+    t.props.borders = Some(Borders { top: line, left: line, bottom: line, right: line, between: line, inside_v: line, art: None });
     t.props.cell_margins = Some([5.0, 5.4, 5.0, 5.4]);
     for (r, text) in t.rows.iter_mut().zip(["one", "two"]) {
         r.props.height = Some(30.0);
@@ -4285,7 +4285,7 @@ fn compatibility_mode_decides_where_a_table_s_edge_sits() {
         d.settings.compat_mode = mode;
         let line = Some(Border { style: BorderStyle::Single, width: 0.5, color: None, space: 0.0 });
         let mut t = Table::new(1, 1, 200.0);
-        t.props.borders = Some(Borders { top: line, left: line, bottom: line, right: line, between: line, inside_v: line });
+        t.props.borders = Some(Borders { top: line, left: line, bottom: line, right: line, between: line, inside_v: line, art: None });
         t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("cell", Default::default()))];
         d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(t))];
         let l = lay(&d);
@@ -8344,7 +8344,7 @@ fn split_cell_reuses_top_inset() {
             let mut t = Table::new(1, 1, 300.0);
             t.rows[0].cells[0].props.margins = Some([margin, 5.4, 0.0, 5.4]);
             let edge = Some(Border { width, style: if width > 0.0 { BorderStyle::Single } else { BorderStyle::None }, ..Default::default() });
-            t.props.borders = Some(Borders { top: edge, bottom: edge, left: edge, right: edge, between: edge, inside_v: edge });
+            t.props.borders = Some(Borders { top: edge, bottom: edge, left: edge, right: edge, between: edge, inside_v: edge, art: None });
             t.rows[0].props.height = Some(100.0);
             t.rows[0].props.height_rule = HeightRule::AtLeast;
             let mut p = Paragraph::with_text(
